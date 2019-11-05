@@ -9,6 +9,8 @@
     "test-chaos": " mocha --timeout 10000 ./test/suites/02-sanity-chaos.js",
     "test-dictionary": " mocha --timeout 10000 ./test/suites/03-sanity-dictionary.js",
 
+    "simple-oapi": " node examples/simple-oapi.js",
+
     "server-oapi": " node examples/servers/oapi.js",
 
     "server-chaos": " node examples/servers/chaos",
