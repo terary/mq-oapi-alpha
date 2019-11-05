@@ -30,9 +30,9 @@ function importTest(name, testSuite) {
         require(testSuite);
     });
 }
-//const app = require('./support/testServer.js');
+// const app = require('./support/testServer.js');
 const app = require('../examples/servers/MonqadeDictionary');
-
+let testRecordSet;
 
 describe("Monqade Express Tests", function () {
 
@@ -49,7 +49,7 @@ describe("Monqade Express Tests", function () {
         LAMBDAS.datasetCreator.build(theMqSchema,50)
         .then(dataset=>{
             COMMON_TEST_VARS.runtime.testRecordSet = dataset;
-            testRecordSet = dataset;
+//            testRecordSet = dataset;
             done();
         }).catch(err=>{
             done(err);
@@ -67,9 +67,9 @@ describe("Monqade Express Tests", function () {
     importTest(".doQueryMany", './suites/doQueryMany.js') ;
     importTest(".doFindMany", './suites/doFindMany.js') ;
 
-    // importTest("MiddlewareStack", './suites/middleware-stack.js') ;
-    // importTest("MonqadeMiddleware - shipped middleware", './suites/monqade-middleware.js') ;
-    // importTest("Misc.", './suites/misc.js') ;
+    importTest("MiddlewareStack", './suites/middleware-stack.js') ;
+    importTest("MonqadeMiddleware - shipped middleware", './suites/monqade-middleware.js') ;
+    //importTest("Misc.", './suites/misc.js') ;
 
 
     after(function (done) {

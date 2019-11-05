@@ -5,7 +5,7 @@ const mqSchemaDef = require('monqade-dev-schemas').chaos;
 /**
  * Should only need to change schema definition to change this server's schema
  * 
- * Test 0x-sanity-[schema name] calls the specified server.  So to make sanity tests 
+ * Test 0[n]-sanity-[schema name] calls the specified server.  So to make sanity tests 
  *      A) duplicate this file change schema definition
  *      B) duplicate 0x-sanity-[schema name] file renaming and change reference to this new file (from step A)
  */

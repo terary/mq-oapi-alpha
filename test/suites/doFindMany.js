@@ -11,7 +11,7 @@ const expectedResponses = require('../support/expectedResponses')
 const expected400response = expectedResponses.expected400response;
 const expectedMonqadeResponse = expectedResponses.expectedMonqadeResponse;
 
-let requester,ENDPOINT;// = chai.request(app).keepOpen()
+let requester, ENDPOINT,testRecordSet ;// = chai.request(app).keepOpen()
 
 before(function(done){
     console.log('\t*starting', `(${path.basename(__filename)})`)
