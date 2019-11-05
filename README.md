@@ -53,6 +53,7 @@ npm run server-dictionary
 
 See package.json for most up to date.
 
+
 note:
 chaos and dictionary are schemas that can be found:
 https://github.com/terary/monqade-dev-schemas/tree/master/schemas
@@ -61,67 +62,10 @@ Part of the demonstration is to show how easy it is to change-out or develop usi
 
 
 
----------------------------  OAPI Document Examples
-~~~~~~~~~~~~~~~ Creates a simple doc ~~~~~~~~~~~~~~
-const { OapiDocument } = require('../index.js');
-const oapiDoc = new OapiDocument();
-console.log(oapiDoc.toJSON())
-
-~~~~~~~~~~~~~~  Create Simple Doc setting some global values 
-~~~ Will need to dump doc to see all available options - should be inline with OAPI 3.0
-const { OapiDocument } = require('../index.js');
-const init = OapiDocument.getTemplate();
-init.servers.push('example.com')
-init.info.title ='My Example App '
-init.info.version ='3.0.x '
-const oapiDoc = new OapiDocument(init);
-console.log(oapiDoc.toJSON())
-
-~~~~~~~~~~~~~~~~~~~~~~~ Create Doc with single simple WebMethod (endpoint)
-
-const IS_REQUIRED = true;
-const { OapiDocument, FieldType, FieldTypeCollection, WebMethodOapi } = require('../index.js');
-
-
-const oapiDoc = new OapiDocument();
-
-const fields = new FieldTypeCollection();
-fields.addFields(new FieldType('parameterName','string', IS_REQUIRED,{description:'Field Description'}))
-
-const wmForeignTime = new WebMethodOapi(
-    'get',              // httpMethod
-    '/exampleWebMethod',     // endpoint
-    'exampleWebMethod',      // operationId (unique within OAPI Doc)
-    (req,res)=>{res.send('hello');},   // to be executed upon request
-    fields, // inputs
-    fields.as200Response(),                 // http response 
-    'Summary of function',                  // human readable
-    'Longer Description of function'        // human readable
-    );
-
-oapiDoc.addPath(wmForeignTime.oapiPath)
-
-console.log(oapiDoc.toJSON())
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  Merge documents
-"use strict";
-
-const { OapiDocument } = require('../index.js');
-
-const init = OapiDocument.getTemplate();
-init.servers.push('example.com')
-const serviceOapiDoc = new OapiDocument(init);
-
-
-const functionOapiDoc = new OapiDocument();
-functionOapiDoc.responses.add('didGood',{'200':{$ref:'#/components/schemas/Empty'}})
-
-serviceOapiDoc.merge(functionOapiDoc)
-console.log(serviceOapiDoc.toJSON());
-
-
-
-
-
-
-
+[Oapi Document usage](./usage-oapi-doc.md)
+[Simple Monqade Express usage](./usage-mqschema.md)
+[Monqade Express + OpenAPI usage](./usage-mqschema-oapi.md)
+[Road Map](./roadmap.md)
+[Read Me](./README.md)
+More examples can be found in the examples directory (see package.json).
+Tests should run as expected (see package.json).
