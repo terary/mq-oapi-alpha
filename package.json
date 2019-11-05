@@ -1,0 +1,41 @@
+{
+  "name": "goof-oapi-express-mq",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": " mocha --timeout 10000 ./test/controller.js",
+
+    "test-chaos": " mocha --timeout 10000 ./test/suites/02-sanity-chaos.js",
+    "test-dictionary": " mocha --timeout 10000 ./test/suites/03-sanity-dictionary.js",
+
+    "server-oapi": " node examples/servers/oapi.js",
+
+    "server-chaos": " node examples/servers/chaos",
+    "server-dictionary": " node examples/servers/dictionary",
+
+    "x-debug-server": "nodemon --inspect ./dev/serverWrapper.js",
+    "debug-chaos": "nodemon --inspect ./examples/servers/chaos.js",
+    "debug-dictionary": "nodemon --inspect ./examples/servers/dictionary.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "express": "^4.17.1",
+    "json2yaml": "^1.1.0",
+    "lodash.clonedeep": "^4.5.0",
+    "lodash.merge": "^4.6.2",
+    "mongoose": "^5.7.1",
+    "monqade-dev-schemas": "^1.1.0",
+    "monqade-schema": "^1.0.3",
+    "monqade-shared": "^1.1.0",
+    "morgan": "^1.9.1"
+  },
+  "devDependencies": {
+    "chai-http": "^4.3.0",
+    "mocha": "^6.2.1",
+    "nodemon": "^1.19.3"
+  }
+}

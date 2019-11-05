@@ -1,0 +1,141 @@
+'use strict';
+const THIS_IS_MODULE = require.main !== module;
+const port = process.env.PORT || "8000";
+
+const COMMON_TEST_VARS = require('../../environment');
+
+const MonqadeExpressOapi = require('../../src/classes/monqade-ext/monqade-express-oapi')
+const dictSchemaDef = require('monqade-dev-schemas').dictionary;
+const express = require("express");
+const morgan = require('morgan')
+const OapiDocument = require('../../src/classes/oapi/document/')
+const {FieldType, FieldTypeCollection, WebMethod }  = require('../../src/classes/web-method/');
+const {webMethods, oapiDocument} = require('../../dev/make-web-methods');
+const echoResponse = {'200':{$ref:'#/components/schemas/Empty'}};
+
+
+const app = express();
+// app.use( bodyParser.json() );       //
+app.use(express.json()); // instead of bodyParser
+if( ! THIS_IS_MODULE ) {
+    app.use(morgan('combined')); 
+}
+
+
+
+
+
+//examples: 
+
+addForeignTimeEndpoint(app);    //      adding a non Monqade function with parameters, oapiDoc+express
+addServerTimeEndpoint(app)      //      adding a basic non0Monqade function with no parameters
+
+addOpenApiEndpoint(app);  // the OpenAPI for entire app (0 or more MonqadeSchemas)
+
+
+//    mongConn
+const mqSchema= new MonqadeExpressOapi(dictSchemaDef.paths,dictSchemaDef.options,COMMON_TEST_VARS.runtime.MONGO_CONNECTION, {doUpsertOne:{enabled:true}} );  
+//const mqSchema= new MonqadeExpressOapi(dictSchemaDef.paths,dictSchemaDef.options,COMMON_TEST_VARS.runtime.MONGO_CONNECTION);  
+
+// **************  PROBABLY A BIG                                                          **** NO-NO ****  
+// need to figure out a way to provide schema for testing and server 
+COMMON_TEST_VARS.runtime.theMqSchema = mqSchema
+COMMON_TEST_VARS.runtime.schemas.dictionaryMqSchema  = mqSchema;
+COMMON_TEST_VARS.runtime.ENDPOINT = '/' + mqSchema.collectionName;
+
+//   require('./support/create-mqSchemas')(mongConn);
+// COMMON_TEST_VARS.runtime.theMqSchema =COMMON_TEST_VARS.runtime.schemas.usersMqSchema; // backward compatibility - will need remove/ use onl users - or whatever
+
+
+
+
+// New (scemaDef ) is the right way to go - it causes issues  with  testing
+
+mqSchema.appendRouter(app, oapiDocument)
+oapiDocument.merge(mqSchema.oapiDocument);
+oapiDocument.merge(MonqadeExpressOapi.oapiMonqadeUniversal());
+
+if( ! THIS_IS_MODULE ){
+    app.listen(port, () => {
+        console.log(`Listening to requests on http://localhost:${port}`);
+        });
+}
+
+module.exports= app;
+
+
+
+//**************************** endpoint + webMethods from here  *******************************   */
+function addServerTimeEndpoint(app) {
+    //example: 
+    //      adding a non Monqade function, oapiDoc+express
+    const fnServerTime = function(req,res){res.send({serverTime:new Date()})}
+    const wmServerTime = new WebMethod('get','/serverTime','serverTime',fnServerTime,undefined, OapiDocument.genericResponses(),'summary','desc')
+    oapiDocument.addPath(wmServerTime.oapiPath)
+    app[wmServerTime.httpMethod](wmServerTime.endpoint,wmServerTime.execFn);
+
+    app.use(function(req,res,next){
+        next();
+    });
+
+}
+
+function addOpenApiEndpoint(app){
+
+    let mwDescription = `
+    path definition holds parameter definitions
+    form: example.com/resource?p1=v1&p2=v2...
+    `;
+    const fnWmGetOpenAPI = (req,res)=>{res.send(
+    oapiDocument.toJSON()
+    )}
+    const wmGetOAPIDoc = new WebMethod('get','/openapi','openapidoc',  fnWmGetOpenAPI,undefined, echoResponse, 'echos the message ',mwDescription);
+    oapiDocument.addPath(wmGetOAPIDoc.oapiPath);
+    webMethods[wmGetOAPIDoc.oapiOperationId] = wmGetOAPIDoc;
+    app[wmGetOAPIDoc.httpMethod](wmGetOAPIDoc.endpoint, wmGetOAPIDoc.execFn);
+
+}
+
+
+function addForeignTimeEndpoint(app,oapiDoc){
+    // Example:
+    //      create endpoint (webMethod) describing input and output parameters
+    //      document and add express route 
+
+    const fnDescription = 'valid IANA timezone (https://www.iana.org/time-zones) (https://gist.github.com/aviflax/a4093965be1cd008f172)'
+    const tzDescription = 'valid IANA timezone'
+    const fnSummary = 'Return current time of the given timezone';
+    const IS_REQUIRED = true;
+
+    const responseFields = new FieldTypeCollection();
+    responseFields.addFields(new FieldType('timezone','string'),new FieldType('currentTime','date'))
+
+    const oapiResponseObject =     Object.assign({},OapiDocument.genericResponses(),responseFields.as200Response());
+    const  fnParameters = new FieldTypeCollection();
+    fnParameters.addFields(new FieldType('timezone','string', IS_REQUIRED,{description:tzDescription}));
+
+    
+    const fnGetForeignTime = function(req,res){
+        const tz = req.query.timezone || "Australia/Brisbane";
+        const timeString = new Date().toLocaleString("en-US", {timeZone: tz});
+        const aestTime = new Date(timeString); 
+        res.send({currentTime:timeString, timezone:tz})
+    }
+
+
+    const wmForeignTime = new WebMethod(
+                                        'get',              // httpMethod
+                                        '/foreignTime',     // endpoint
+                                        'foreignTime',      // operationId (unique within OAPI Doc)
+                                        fnGetForeignTime,   // to be executed upon request
+                                        fnParameters, // inputs
+                                        oapiResponseObject,  // outputs
+                                        fnSummary,          // human readable
+                                        fnDescription      // human readable
+                                        );
+
+    oapiDocument.addPath(wmForeignTime.oapiPath)
+    app[wmForeignTime.httpMethod](wmForeignTime.endpoint, wmForeignTime.execFn);
+
+}
+

@@ -1,0 +1,343 @@
+"use strict";
+
+/* cSpell: ignore oapi */
+
+const express = require('express');
+const MonqadeSchema = require('monqade-schema');
+const OapiDocument = require('../oapi/document')
+const {FieldType, FieldTypeCollection, WebMethod }  = require('../web-method/');
+const {extractPayloadOrDie, terminateMonqadeError, terminateStandardMonqadeResponse, _handleMonqadeAPIPromise} = require('./monqade-middleware');
+const mqMiddleware = require('./monqade-middleware');
+
+const MiddlewareStack = require('../middleware-stack');
+const collectionsInstantiated = new Set()
+ 
+
+const mqResponse = {
+        '200':{$ref:'#/components/responses/MonqadeResponse'},
+        '400':{$ref:'#/components/responses/MonqadeError'}
+        };
+
+
+const IS_REQUIRED = true;
+
+const wmOpt = {
+    enabled:true,
+    path:'/',
+    httpMethod:'get'
+}
+
+const defaultOpts = {
+    doInsertOne: Object.assign({},wmOpt,{httpMethod:'post'}), 
+    doUpsertOne: Object.assign({},wmOpt,{enabled:false}), 
+    doFindOne: Object.assign({},wmOpt),
+    doDeleteOne: Object.assign({},wmOpt,{httpMethod:'delete'}), 
+}
+
+module.exports =  class MqSchemaExt extends MonqadeSchema {
+    constructor(schemaPaths,schemaOptions,mongooseRef,opts=defaultOpts){
+        super(schemaPaths,schemaOptions,mongooseRef)
+
+        collectionsInstantiated.add(this.collectionName);
+
+
+        this._buildWmFields()
+        this._buildWebMethods();
+        this.extractPayloadOrDie = extractPayloadOrDie;  //debug/dev purposes - *REMOVE*
+        //this._middlewareStacks = {};  // will be in form of {webMethods:[stack1],...}
+        this._oapiDocument = undefined; 
+        this._fieldsAll = undefined ; // will be FieldTypeCollection 
+    }
+    get oapiDocument() {return this._makeOapiDoc();}
+
+    toWebMethods(){
+        if(!this._webMethods){
+            this._buildWebMethods()
+        }
+    }
+    _buildWebMethods(){
+        //const rootEndpoint = '/' + this.collectionName + '/';
+        const mqSchema = this;
+
+        const rootEndpoint = '/' + this.collectionName ;
+        this._webMethods = {}
+        this._middlewareStacks={};
+        this._insertFields=new FieldTypeCollection(); // this gets reused- but after reorginizing code - should need it anymore
+        // this._documentFields=new FieldTypeCollection(); // 
+        const findFields =new FieldTypeCollection();
+
+        this._insertFields.addFields( ... [... new Set( this.getPathNamesInsertable())]
+                                        .map(pathID => {
+                                            return this._wmFields[pathID]
+                                        }));
+
+        findFields.addFields( ... [... new Set( this.getPathNamesSystem())]
+                                        .map(pathID => {
+                                            return this._wmFields[pathID]
+                                        }));
+        
+
+        // *************** doFindOne
+
+        //const oapiSchemaRef = findFields.asGetSchemaReference('systemPaths',{$ref:'#/components/schemas/systemPaths'});
+        //const oapiSchemaRef = findFields.asGetSchemaReference(`payload`,{$ref:`#/components/schemas/${this.collectionName}%3AsystemPaths`});
+        
+        const oapiSchemaRef = findFields.asGetSchemaReference(`payload`,{$ref:`#/components/schemas/${this.collectionName}~systemPaths~payload`});
+        const fnDoFindOne = function(req,res){
+            mqSchema._middlewareStacks['doFindOne'].execute(req,res,mqSchema)
+        }
+        this._webMethods['doFindOne'] = new WebMethod('get',`${rootEndpoint}/:payload`,`${this.collectionName}~doFindOne`,  fnDoFindOne, oapiSchemaRef, mqResponse, 'doFindOne ','Finds a new document');
+        this._middlewareStacks['doFindOne'] = new MiddlewareStack();
+
+        // *************** doFindOne
+
+
+        // *************** doInsertOne
+
+        const oapiSchemaRefInsertable =  this._insertFields.asRequestBodyRef({$ref:`#/components/schemas/${this.collectionName}~insertable`});
+        const fnDoInsertOne = function(req,res){
+            mqSchema._middlewareStacks['doInsertOne'].execute(req,res,mqSchema)
+        }
+        this._webMethods['doInsertOne'] = new WebMethod('post',rootEndpoint,`${this.collectionName}~doInsertOne`,fnDoInsertOne,  oapiSchemaRefInsertable, mqResponse, 'doInsertOne ','Inserts a new document');
+        this._middlewareStacks['doInsertOne'] = new MiddlewareStack();
+        // *************** doInsertOne
+
+    }
+    OAPISchemaPathsSystem(){
+        const fields =new FieldTypeCollection();
+        fields .addFields( ... [... new Set( this.getPathNamesSystem())]
+        .map(pathID => {
+            return this._wmFields[pathID]
+        }));
+        return fields.asSchemaParameters();
+    }
+    OAPISchemaPathsAll(){
+        const fields =new FieldTypeCollection();
+        fields .addFields( ... [... new Set( this.getPathNamesAll())]
+        .map(pathID => {
+            return this._wmFields[pathID]
+        }));
+        return fields.asSchemaParameters();
+    }
+    _doActionOne(req,res,doAction){
+        const candidate = res.locals.monqadePayload // fetch from request
+        const thePromise = this[doAction](candidate)
+        mqMiddleware.handleMonqadeAPIPromise(req,res,thePromise);
+    }
+    use(webMethodId, fn){
+        console.log(`
+            This should accept ...fn
+            Also not tested
+        `);
+        this._middlewareStacks['doInsertOne'].use(fn)
+
+    }
+    _makeOapiDoc(){
+        if(this._oapiDocument){
+           return this._oapiDocument;
+        }
+        this._oapiDocument = new OapiDocument();
+        const doFindOne = this.getWebMethods()['doFindOne'];
+        this._oapiDocument.addPath(doFindOne.oapiPath);
+    
+        this._oapiDocument.schemas.add(`${this.collectionName}~systemPaths`, this.OAPISchemaPathsSystem());
+        this._oapiDocument.schemas.addSchemaRef(`${this.collectionName}~systemPaths~payload`, 'payload', {$ref:`#/components/schemas/${this.collectionName}~systemPaths`});
+        this._oapiDocument.schemas.add(`${this.collectionName}~allPaths`, this.OAPISchemaPathsAll());
+
+        /// this._oapiDocument.schemas.add(`${this.collectionName}~allPaths`, this._wmFields.OAPISchemaPathsAll());
+        // want to create document - without required.  If using 'allPaths' then want it have required section and refer to document section
+        this._oapiDocument.schemas.add(`${this.collectionName}~document`, this.OAPISchemaPathsAll());
+
+
+        const doInsertOne = this.getWebMethods()['doInsertOne'];
+        this._oapiDocument.addPath(doInsertOne.oapiPath);
+        this._oapiDocument.schemas.addEnvelope(`${this.collectionName}~insertable`, 'payload', this._insertFields.asSchemaParameters());
+
+
+        // const monqadeResponseFields =new FieldTypeCollection();
+        // monqadeResponseFields.addFields( 
+        //     new FieldType('_docs', 'array', IS_REQUIRED),
+        //     new FieldType('isMonqadeResponse', 'boolean', IS_REQUIRED, {description:'Always true'})
+        //     );
+        // const ps=    monqadeResponseFields.asSchemaParameters()
+        // ps.properties._docs['items'] ={oneOf:[ {$ref: `#/components/schemas/${this.collectionName}~document`} ]}
+        // this._oapiDocument.schemas.add(`MonqadeResponse`, monqadeResponseFields.asSchemaParameters());
+
+
+        // const monqadeErrorFields =new FieldTypeCollection();
+        // monqadeErrorFields.addFields( 
+        //     new FieldType('name', 'string', IS_REQUIRED),
+        //     new FieldType('_code', 'string', IS_REQUIRED,{description:'MonqadeErrorCode see: http://...'}),
+        //     new FieldType('_description', 'string', IS_REQUIRED,{description:'Human readable -maybe not UI appropriate.'}),
+        //     new FieldType('isMonqadeError', 'boolean', IS_REQUIRED, {description:'Always true'}), 
+        //     new FieldType('originalError', 'string', ! IS_REQUIRED,{description:'If available original Error - dev/debug purposes'})
+        //     );
+        // this._oapiDocument.schemas.add(`MonqadeError`, monqadeErrorFields.asSchemaParameters());
+        // const responseObject = {
+        //     description:'All Monqade operations respond',
+        //     content:{
+        //         'application/json': {
+        //             schema: {
+        //                 oneOf:[
+        //                     {$ref: '#/components/schemas/MonqadeResponse'},
+        //                     {$ref: '#/components/schemas/MonqadeError'}
+        //                 ]
+        //             }
+        //         }
+        //     }
+        // }    
+        // this._oapiDocument.responses.add('Monqade',responseObject )
+
+        return this._oapiDocument;
+    }
+    appendRouter(app){
+        this._parentApp = app;
+        const mqSchema = this;
+        
+        
+        // *************  Find One
+        const doFindOne = this.getWebMethods()['doFindOne'];
+        
+        this._middlewareStacks['doFindOne'].push(  // stack first-in-last-out hence 'push'
+            function(req,res){mqSchema._doActionOne(req,res,'doFindOne')},
+            function(req,res,next){mqSchema.extractPayloadOrDie(req,res,next)});
+
+        //                  express route
+        app[doFindOne.httpMethod](doFindOne.endpoint,doFindOne.execFn); 
+
+
+
+        // *************  Insert One
+        const doInsertOne = this.getWebMethods()['doInsertOne'];
+
+        this._middlewareStacks['doInsertOne'].push( // stack first-in-last-out hence 'push'
+                            function(req,res){mqSchema._doActionOne(req,res,'doInsertOne')},
+                            function(req,res,next){mqSchema.extractPayloadOrDie(req,res,next)}
+                );
+        //                  express route
+        app[doInsertOne.httpMethod](doInsertOne.endpoint +'/' , doInsertOne.execFn );
+        // *************  Insert One
+        
+
+        
+
+        app['get']('/doit',(req,res)=>{res.send('doIt')});
+
+
+
+    }
+    _payloadEnvelope(obj){
+
+    }
+
+    getWebMethods(){
+        return this._webMethods;
+    }
+    _buildWmFields(){
+        // const fields = new FieldTypeCollection();
+        // this._fieldsAll =   new FieldTypeCollection();
+        this._wmFields = {};
+    
+        this.getPathNamesAll().forEach( (pathID)=> {
+            
+            const pOpts = this.getPathOptions(pathID)
+            switch(pathID) { // systemPaths - are little special require custom overrides
+                case "updatedAt": 
+                case "createdAt": 
+                    this._wmFields[pathID] = new FieldType(pathID, 'date', pOpts.isRequired);
+                break;
+
+                case "_docVersionKey" :
+                case "_schemaVersion":
+                    this._wmFields[pathID] = new FieldType(pathID, 'string', pOpts.isRequired); 
+                break;
+
+                case "_id":
+                    const opts = {minLength:40,maxLength:40};
+                    this._wmFields[pathID] = new FieldType(pathID, 'string', pOpts.isRequired,opts,opts);
+                break;
+                default:
+                    this._wmFields[pathID] = new FieldType(pathID, pOpts.type.toLowerCase(), pOpts.isRequired);
+            }
+            //this._fieldsAll.addFields(this._wmFields[pathID])
+
+        });
+
+    }
+
+    static oapiMonqadeUniversal() {
+
+        const oapiDocument = new OapiDocument();
+
+        const monqadeResponseFields =new FieldTypeCollection();
+        monqadeResponseFields.addFields( 
+            new FieldType('_docs', 'array', IS_REQUIRED),
+            new FieldType('isMonqadeResponse', 'boolean', IS_REQUIRED, {description:'Always true'})
+            );
+        const ps=    monqadeResponseFields.asSchemaParameters()
+        // const documentSchemaRefs = collectionsInstantiated.map(collection=>{
+        //     return {$ref:`#/components/schemas/${collection}~document`}
+        // }) 
+        const documentSchemaRefs = [... collectionsInstantiated].map( collection => {
+            return {$ref:`#/components/schemas/${collection}~document`}
+        });
+
+
+
+        //ps.properties._docs['items'] ={oneOf:[ {$ref: `#/components/schemas/${collectionsInstantiated[0]}~document`} ]}
+        ps.properties._docs['items'] ={oneOf:documentSchemaRefs}
+        oapiDocument.schemas.add(`MonqadeResponse`, monqadeResponseFields.asSchemaParameters());
+
+
+        const monqadeErrorFields =new FieldTypeCollection();
+        monqadeErrorFields.addFields( 
+            new FieldType('name', 'string', IS_REQUIRED),
+            new FieldType('_code', 'string', IS_REQUIRED,{description:'MonqadeErrorCode see: http://...'}),
+            new FieldType('_description', 'string', IS_REQUIRED,{description:'Human readable -maybe not UI appropriate.'}),
+            new FieldType('isMonqadeError', 'boolean', IS_REQUIRED, {description:'Always true'}), 
+            new FieldType('originalError', 'string', ! IS_REQUIRED,{description:'If available original Error - dev/debug purposes'})
+            );
+        oapiDocument.schemas.add(`MonqadeError`, monqadeErrorFields.asSchemaParameters());
+
+        // const responseObject = {
+        //     description:'All Monqade operations respond',
+        //     content:{
+        //         'application/json': {
+        //             schema: {
+        //                 oneOf:[
+        //                     {$ref: '#/components/schemas/MonqadeResponse'},
+        //                     {$ref: '#/components/schemas/MonqadeError'}
+        //                 ]
+        //             }
+        //         }
+        //     }
+        // }    
+
+        const responseObjectError = {
+            description:'All Monqade operations respond',
+            content:{
+                'application/json': {
+                    schema: {
+                        $ref: '#/components/schemas/MonqadeError'
+                    }
+                }
+            }
+        }    
+        const responseObjectResponse = {
+            description:'All Monqade operations respond',
+            content:{
+                'application/json': {
+                    schema: {
+                        $ref: '#/components/schemas/MonqadeResponse'
+                    }
+                }
+            }
+        }    
+        //oapiDocument.responses.add('MonqadeGeneral_DO_NOT_USE',responseObject )
+        oapiDocument.responses.add('MonqadeError',responseObjectError )
+        oapiDocument.responses.add('MonqadeResponse',responseObjectResponse )
+        return oapiDocument;
+
+    }
+
+ }

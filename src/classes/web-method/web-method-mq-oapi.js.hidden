@@ -1,0 +1,86 @@
+"use strict";
+
+
+
+const WebMethod = require('./web-method').WebMethod;
+const {FieldTypeCollection} = require('./field-type')
+//OAPI Path
+const PathItem = ( httpMethod, operationObject)=>{
+    return {[httpMethod]:operationObject}
+}
+const Path = ( requestURI, pathItemObject)=>{
+    return {[requestURI]: pathItemObject}
+}
+
+//const {FieldType, FieldTypeCollection, WebMethod }  = require('../web-method/');
+
+console.log(`
+I am pretty sure this class is no longer necessary.
+
+`
+);
+
+class WebMethodMqOapi extends  WebMethod {
+    constructor(httpMethod, endpoint, operationId, execFn = ()=>{} ,
+    wmArgs = new FieldTypeCollection([]) ,responses = monqadeResponsesTemplate , summary="", description="") {
+        super(httpMethod, endpoint,operationId, execFn,wmArgs,responses,summary,description);
+
+    }
+    // _fieldDescriptionQueryString(refString){
+    //     const candidateDoc = this.payloadCandidateDocEnvelope(refString)
+    //     return { [this._fieldLocation] : [{
+    //         name: 'payload',
+    //         in: 'path',
+    //         required: true,
+    //         schema: candidateDoc['schema']
+    //     }] }
+    // }
+    // oapiMqPayloadMany(refString, refQueryOptsSchema){
+    //     const fields = this._fieldDescriptionMany(refString , refQueryOptsSchema ); 
+    //     return this._oapiMqPayload(fields);
+    // }
+    // _fieldDescriptionMany(refString, qryOptionsRef){
+    //     const candidateDoc = this.payloadCandidateDocManyEnvelope(refString, qryOptionsRef)
+    //     return { [this._fieldLocation] : [{
+    //         name: 'payload',
+    //         in: 'path',
+    //         required: true,
+    //         schema: candidateDoc['schema']
+    //     }] }
+    // }
+    // oapiMqPayloadInQuery(refString){
+    //     const fields = this._fieldDescriptionQueryString(refString); 
+    //     return this._oapiMqPayload(fields);
+    // }
+
+
+    // oapiMqPayload(refStrings){
+    //     const fields = this._fieldDescription(refStrings);
+    //     return this._oapiMqPayload(fields);
+    // }
+
+
+    // _oapiMqPayload(fields){  // moving to mq
+    //     const op = { 
+    //         operationId: this._operationId, 
+    //         summary: this._summary, 
+    //         description: this._description,
+    //         [this._fieldLocation] : fields[this._fieldLocation], 
+    //         responses:this._responses 
+    //     }; 
+    //     const item = PathItem(this._httpMethod, op);
+    //     return Path(this._endpoint,item);
+    // }
+    // _fieldDescription(refStrings){
+    //     const payloadCandidateDoc = this.payloadCandidateDocEnvelope(refStrings)
+    //     return { [this._fieldLocation] : {
+    //         content: {
+    //             'application/json':payloadCandidateDoc
+    //         }
+    //     }}
+        
+    // }
+
+}
+
+module.exports.WebMethodMqOapi = WebMethodMqOapi;
